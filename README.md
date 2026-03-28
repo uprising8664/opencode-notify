@@ -4,6 +4,12 @@
 
 A plugin for [OpenCode](https://github.com/sst/opencode) that delivers Native OS notifications when tasks complete, errors occur, or the AI needs your input. It uses native OS notification delivery on macOS, Windows, and Linux, with an additional [cmux](https://www.cmux.dev/)-native path when available.
 
+## Fork Features
+
+This fork ([uprising8664/opencode-notify](https://github.com/uprising8664/opencode-notify)) adds:
+
+- **iTerm2 click-to-focus specific tab** — clicking a notification on macOS focuses the exact iTerm2 tab that OpenCode is running in, not just the iTerm2 app. This works automatically when `ITERM_SESSION_ID` is set in the environment (standard in iTerm2). No configuration required.
+
 ## Why This Exists
 
 You delegate a task and switch to another window. Now you're checking back every 30 seconds. Did it finish? Did it error? Is it waiting for permission?
@@ -78,7 +84,7 @@ If [cmux](https://www.cmux.dev/) is unavailable or invocation fails, notificatio
 
 ## Configuration (Optional)
 
-Works out of the box. To customize, create `~/.config/opencode/kdco-notify.json`:
+Works out of the box. The iTerm2 click-to-focus feature requires no configuration — it is detected automatically. To customize other behaviour, create `~/.config/opencode/kdco-notify.json`:
 
 ```json
 {
@@ -130,20 +136,80 @@ Uses [`detect-terminal`](https://github.com/jonschlinkert/detect-terminal) to au
 
 Ghostty, Kitty, iTerm2, WezTerm, Alacritty, Hyper, Terminal.app, Windows Terminal, VS Code integrated terminal, and many more.
 
-## Manual Installation
+## Manual Installation (from this fork)
 
-If you prefer not to use OCX, copy the plugin files into `.opencode/plugins/` and preserve the multi-file layout:
+Use this method to install directly from this fork — no OCX required. These instructions install the plugin **globally** (applies to all OpenCode sessions). For per-project installation, substitute `~/.config/opencode/` with `.opencode/` in your project root.
 
-- `.opencode/plugins/notify.ts`
-- `.opencode/plugins/notify/backend.ts`
-- `.opencode/plugins/notify/cmux.ts`
-- `.opencode/plugins/kdco-primitives/types.ts`
-- `.opencode/plugins/kdco-primitives/with-timeout.ts`
+### Prerequisites
 
-**Caveats:**
-- Manually install dependencies (`node-notifier`, `detect-terminal`)
-- Install [cmux](https://www.cmux.dev/) if you want the additional [cmux](https://www.cmux.dev/)-native notification path
-- Updates require manual re-copying
+- [OpenCode](https://github.com/sst/opencode) installed
+- Node.js and npm available (`node --version`)
+- macOS (for the iTerm2 click-to-focus feature)
+
+### Steps
+
+**1. Clone this fork**
+
+```bash
+git clone https://github.com/uprising8664/opencode-notify.git ~/opencode-notify
+```
+
+**2. Create the plugins directory**
+
+```bash
+mkdir -p ~/.config/opencode/plugins/notify
+mkdir -p ~/.config/opencode/plugins/kdco-primitives
+```
+
+**3. Copy plugin files**
+
+```bash
+cp ~/opencode-notify/src/notify.ts            ~/.config/opencode/plugins/notify.ts
+cp ~/opencode-notify/src/notify/backend.ts    ~/.config/opencode/plugins/notify/backend.ts
+cp ~/opencode-notify/src/notify/cmux.ts       ~/.config/opencode/plugins/notify/cmux.ts
+cp ~/opencode-notify/src/kdco-primitives/types.ts        ~/.config/opencode/plugins/kdco-primitives/types.ts
+cp ~/opencode-notify/src/kdco-primitives/with-timeout.ts ~/.config/opencode/plugins/kdco-primitives/with-timeout.ts
+```
+
+**4. Install dependencies**
+
+```bash
+npm install --prefix ~/.config/opencode node-notifier detect-terminal
+```
+
+This adds `node-notifier` and `detect-terminal` to `~/.config/opencode/node_modules/`. OpenCode's embedded Bun runtime picks them up automatically.
+
+**5. Register the plugin in OpenCode config**
+
+Add the plugin entry to `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "plugins": [
+    "~/.config/opencode/plugins/notify.ts"
+  ]
+}
+```
+
+If you already have a `plugins` array, just append the entry.
+
+**6. Verify**
+
+Start a new OpenCode session. When a task completes, errors, or the AI needs input, you should receive a macOS Notification Center alert. If you are running in iTerm2, clicking the notification will focus the exact tab OpenCode is running in.
+
+### iTerm2 Click-to-Focus
+
+No configuration is needed. The plugin reads `ITERM_SESSION_ID` from the environment (automatically set by iTerm2) and uses it to focus the correct tab via AppleScript when a notification is clicked. If `ITERM_SESSION_ID` is not present (e.g. you are using a different terminal), the plugin falls back to bringing the terminal app to the foreground as usual.
+
+### Updating
+
+To pick up changes from the fork:
+
+```bash
+cd ~/opencode-notify && git pull
+cp src/notify.ts ~/.config/opencode/plugins/notify.ts
+# Re-copy any other changed files as needed
+```
 
 ## Part of the OCX Ecosystem
 
