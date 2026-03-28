@@ -23,9 +23,9 @@ import * as os from "node:os"
 import * as path from "node:path"
 import type { Plugin } from "@opencode-ai/plugin"
 import type { Event } from "@opencode-ai/sdk"
-// @ts-expect-error - installed at runtime by OCX
+// @ts-expect-error - installed via npm
 import detectTerminal from "detect-terminal"
-// @ts-expect-error - installed at runtime by OCX
+// @ts-expect-error - installed via npm
 import notifier from "node-notifier"
 import type { OpencodeClient } from "./kdco-primitives/types"
 import { sendNotificationWithFallback } from "./notify/backend"
@@ -55,6 +55,8 @@ interface TerminalInfo {
 	name: string | null
 	bundleId: string | null
 	processName: string | null
+	/** iTerm2 session UUID extracted from ITERM_SESSION_ID env var */
+	itermSessionId: string | null
 }
 
 const DEFAULT_CONFIG: NotifyConfig = {
@@ -150,8 +152,12 @@ async function detectTerminalInfo(config: NotifyConfig): Promise<TerminalInfo> {
 	// Use config override if provided
 	const terminalName = config.terminal || detectTerminal() || null
 
+	// Extract iTerm2 session UUID from ITERM_SESSION_ID (format: "w0t0p0:UUID")
+	const itermEnv = process.env.ITERM_SESSION_ID ?? process.env.TERM_SESSION_ID ?? null
+	const itermSessionId = itermEnv ? (itermEnv.split(":")[1] ?? null) : null
+
 	if (!terminalName) {
-		return { name: null, bundleId: null, processName: null }
+		return { name: null, bundleId: null, processName: null, itermSessionId }
 	}
 
 	// Get process name for focus detection
@@ -164,6 +170,7 @@ async function detectTerminalInfo(config: NotifyConfig): Promise<TerminalInfo> {
 		name: terminalName,
 		bundleId,
 		processName,
+		itermSessionId,
 	}
 }
 
@@ -321,6 +328,40 @@ function buildPermissionEventDedupeKey(properties: unknown): string | null {
 	return `permission:request:${normalizedRequestID}`
 }
 
+// ==========================================
+// ITERM2 TAB FOCUS
+// ==========================================
+
+/**
+ * Builds an osascript one-liner that activates iTerm2 and focuses the exact
+ * tab/session identified by the given UUID.
+ *
+ * We use a single `-e` chain to avoid temp files. The UUID is embedded safely
+ * since it only contains hex digits and hyphens.
+ */
+function buildItermFocusScript(sessionUUID: string): string {
+	// Sanitize: UUIDs are hex + hyphens only
+	const safe = sessionUUID.replace(/[^a-fA-F0-9-]/g, "")
+	return [
+		`osascript`,
+		`-e 'tell application "iTerm2"'`,
+		`-e '  activate'`,
+		`-e '  repeat with w in windows'`,
+		`-e '    repeat with t in tabs of w'`,
+		`-e '      repeat with s in sessions of t'`,
+		`-e '        if unique id of s is equal to "${safe}" then'`,
+		`-e '          tell s to select'`,
+		`-e '          tell t to select'`,
+		`-e '          tell w to select'`,
+		`-e '          return'`,
+		`-e '        end if'`,
+		`-e '      end repeat'`,
+		`-e '    end repeat'`,
+		`-e '  end repeat'`,
+		`-e 'end tell'`,
+	].join(" ")
+}
+
 function sendNodeNotification(options: NotificationOptions): void {
 	const { title, message, sound, terminalInfo } = options
 
@@ -331,9 +372,14 @@ function sendNodeNotification(options: NotificationOptions): void {
 		sound,
 	}
 
-	// macOS-specific: click notification to focus terminal
-	if (process.platform === "darwin" && terminalInfo.bundleId) {
-		notifyOptions.activate = terminalInfo.bundleId
+	if (process.platform === "darwin") {
+		if (terminalInfo.itermSessionId) {
+			// iTerm2: use -execute with osascript to focus the exact tab
+			notifyOptions.execute = buildItermFocusScript(terminalInfo.itermSessionId)
+		} else if (terminalInfo.bundleId) {
+			// Other terminals: just bring the app to front
+			notifyOptions.activate = terminalInfo.bundleId
+		}
 	}
 
 	notifier.notify(notifyOptions)
