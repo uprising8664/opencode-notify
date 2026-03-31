@@ -30,6 +30,7 @@ import notifier from "node-notifier"
 import type { OpencodeClient } from "./kdco-primitives/types"
 import { sendNotificationWithFallback } from "./notify/backend"
 import { canUseCmuxNotification, sendCmuxNotification } from "./notify/cmux"
+import { buildNotificationContent } from "./notification-content"
 
 interface NotifyConfig {
 	/** Notify for child/sub-session events (default: false) */
@@ -408,6 +409,7 @@ async function sendNotification(
 async function handleSessionIdle(
 	client: OpencodeClient,
 	sessionID: string,
+	directory: string,
 	config: NotifyConfig,
 	terminalInfo: TerminalInfo,
 	notificationRuntime: NotificationRuntime,
@@ -424,23 +426,36 @@ async function handleSessionIdle(
 	// Check if terminal is focused (suppress notification if user is already looking)
 	if (await isTerminalFocused(terminalInfo)) return
 
-	// Get session info for context
-	let sessionTitle = "Task"
+	// Get session info and messages for rich notification content
+	let notificationContent = buildNotificationContent({
+		sessionTitle: undefined,
+		sessionID,
+		messages: [],
+		baseTitle: "OpenCode",
+		baseMessage: "Ready for review",
+	})
 	try {
-		const session = await client.session.get({ path: { id: sessionID } })
-		if (session.data?.title) {
-			sessionTitle = session.data.title.slice(0, 50)
-		}
+		const [session, messagesResult] = await Promise.all([
+			client.session.get({ path: { id: sessionID } }),
+			client.session.messages({ path: { id: sessionID }, query: { directory, limit: 20 } }),
+		])
+		notificationContent = buildNotificationContent({
+			sessionTitle: session.data?.title,
+			sessionID,
+			messages: messagesResult.data ?? [],
+			baseTitle: "OpenCode",
+			baseMessage: "Ready for review",
+		})
 	} catch {
-		// Use default title
+		// Use fallback content
 	}
 
 	await sendNotification(
 		{
-			title: "Ready for review",
-			message: sessionTitle,
-			subtitle: sessionTitle,
-			cmuxBody: "OpenCode task is ready for review",
+			title: notificationContent.title,
+			message: notificationContent.message,
+			subtitle: notificationContent.title,
+			cmuxBody: notificationContent.message,
 			sound: config.sounds.idle,
 			terminalInfo,
 		},
@@ -532,7 +547,7 @@ async function handleQuestionAsked(
 // ==========================================
 
 export const NotifyPlugin: Plugin = async (ctx) => {
-	const { client } = ctx
+	const { client, directory } = ctx
 
 	// Load config once at startup
 	const config = await loadConfig()
@@ -577,6 +592,7 @@ export const NotifyPlugin: Plugin = async (ctx) => {
 		await handleSessionIdle(
 			client as OpencodeClient,
 			normalizedSessionID,
+			directory,
 			config,
 			terminalInfo,
 			notificationRuntime,
