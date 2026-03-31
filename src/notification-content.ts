@@ -20,14 +20,16 @@ interface NotificationContentInput {
 }
 
 export function extractMessageText(message: SessionMessage | undefined): string {
-	return (message?.parts ?? [])
+	if (!message?.parts || !Array.isArray(message.parts)) return ""
+	return message.parts
 		.filter((part) => part.type === "text" && typeof part.text === "string")
 		.map((part) => part.text?.trim() ?? "")
 		.filter(Boolean)
 		.join("\n")
 }
 
-export function collapseWhitespace(text: string): string {
+export function collapseWhitespace(text: unknown): string {
+	if (typeof text !== "string") return ""
 	return text
 		.split(/\r?\n/g)
 		.map((line) => line.trim())
@@ -35,7 +37,8 @@ export function collapseWhitespace(text: string): string {
 		.join(" ")
 }
 
-export function getLastNonEmptyLine(text: string): string {
+export function getLastNonEmptyLine(text: unknown): string {
+	if (typeof text !== "string") return ""
 	const lines = text
 		.split(/\r?\n/g)
 		.map((line) => line.trim())
@@ -44,7 +47,8 @@ export function getLastNonEmptyLine(text: string): string {
 	return lines.at(-1) ?? ""
 }
 
-export function findLastMessage(messages: SessionMessage[], role: "user" | "assistant"): SessionMessage | undefined {
+export function findLastMessage(messages: SessionMessage[] | undefined, role: "user" | "assistant"): SessionMessage | undefined {
+	if (!messages || messages.length === 0) return undefined
 	for (let i = messages.length - 1; i >= 0; i--) {
 		const message = messages[i]
 		if (message.info?.role !== role) continue
