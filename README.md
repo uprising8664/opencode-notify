@@ -154,7 +154,7 @@ Use this method to install directly from this fork — no OCX required. These in
 git clone https://github.com/uprising8664/opencode-notify.git ~/opencode-notify
 ```
 
-**2. Create the plugins directory**
+**2. Create the plugin directories**
 
 ```bash
 mkdir -p ~/.config/opencode/plugins/notify
@@ -164,38 +164,67 @@ mkdir -p ~/.config/opencode/plugins/kdco-primitives
 **3. Copy plugin files**
 
 ```bash
-cp ~/opencode-notify/src/notify.ts            ~/.config/opencode/plugins/notify.ts
-cp ~/opencode-notify/src/notify/backend.ts    ~/.config/opencode/plugins/notify/backend.ts
-cp ~/opencode-notify/src/notify/cmux.ts       ~/.config/opencode/plugins/notify/cmux.ts
-cp ~/opencode-notify/src/kdco-primitives/types.ts        ~/.config/opencode/plugins/kdco-primitives/types.ts
-cp ~/opencode-notify/src/kdco-primitives/with-timeout.ts ~/.config/opencode/plugins/kdco-primitives/with-timeout.ts
+cp ~/opencode-notify/src/notify.ts                          ~/.config/opencode/plugins/notify.ts
+cp ~/opencode-notify/src/notification-content.ts            ~/.config/opencode/plugins/notify/notification-content.ts
+cp ~/opencode-notify/src/notify/backend.ts                  ~/.config/opencode/plugins/notify/backend.ts
+cp ~/opencode-notify/src/notify/cmux.ts                     ~/.config/opencode/plugins/notify/cmux.ts
+cp ~/opencode-notify/src/kdco-primitives/types.ts           ~/.config/opencode/plugins/kdco-primitives/types.ts
+cp ~/opencode-notify/src/kdco-primitives/with-timeout.ts    ~/.config/opencode/plugins/kdco-primitives/with-timeout.ts
 ```
+
+`notification-content.ts` must live under `plugins/notify/`, not directly in `plugins/`. OpenCode auto-loads top-level `.ts` files in `plugins/` as plugins, so helper modules belong in subdirectories.
 
 **4. Install dependencies**
 
 ```bash
-npm install --prefix ~/.config/opencode node-notifier detect-terminal
+npm install --prefix ~/.config/opencode @opencode-ai/plugin node-notifier detect-terminal
 ```
 
-This adds `node-notifier` and `detect-terminal` to `~/.config/opencode/node_modules/`. OpenCode's embedded Bun runtime picks them up automatically.
+This adds `@opencode-ai/plugin`, `node-notifier`, and `detect-terminal` to `~/.config/opencode/node_modules/`. OpenCode's embedded Bun runtime picks them up automatically.
 
 **5. Register the plugin in OpenCode config**
 
-Add the plugin entry to `~/.config/opencode/opencode.json`:
+Add the plugin entry to `~/.config/opencode/opencode.json` using OpenCode's `plugin` key:
 
 ```json
 {
-  "plugins": [
+  "plugin": [
     "~/.config/opencode/plugins/notify.ts"
   ]
 }
 ```
 
-If you already have a `plugins` array, just append the entry.
+If you already have a `plugin` array, just append the entry.
 
-**6. Verify**
+**6. If you also use Oh My OpenAgent**
 
-Start a new OpenCode session. When a task completes, errors, or the AI needs input, you should receive a macOS Notification Center alert. If you are running in iTerm2, clicking the notification will focus the exact tab OpenCode is running in.
+Keep `oh-my-openagent` enabled, but disable only its notification hook so you don't get duplicate notifications:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
+  "disabled_hooks": ["session-notification"]
+}
+```
+
+Do **not** nest `disabled_hooks` under `hooks`. `disabled_hooks` belongs at the top level of `oh-my-opencode.json`.
+
+With both plugins installed, a typical `~/.config/opencode/opencode.json` looks like this:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "superpowers@git+https://github.com/obra/superpowers.git",
+    "oh-my-openagent",
+    "~/.config/opencode/plugins/notify.ts"
+  ]
+}
+```
+
+**7. Verify**
+
+Start a new OpenCode session. When a task completes, errors, or the AI needs input, you should receive a native OS notification. If you are running in iTerm2, clicking the notification will focus the exact tab OpenCode is running in.
 
 ### iTerm2 Click-to-Focus
 
